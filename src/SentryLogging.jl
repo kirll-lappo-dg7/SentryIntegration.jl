@@ -1,7 +1,7 @@
 using Logging
 using LoggingExtras: TeeLogger
 
-import ..SentryIntegration: capture_exception
+import ..SentryIntegration
 
 struct SerilogLogger <: AbstractLogger
     min_level::LogLevel
@@ -32,7 +32,7 @@ function Logging.handle_message(filelogger::SerilogLogger, level::LogLevel, mess
         return
     end
 
-    capture_exception(exception)
+    SentryIntegration.capture_exception(exception)
 end
 
 function Logging.shouldlog(filelogger::SerilogLogger, arg...)
