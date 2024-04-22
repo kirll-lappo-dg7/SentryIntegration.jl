@@ -1,7 +1,7 @@
 using Logging
 using LoggingExtras: TeeLogger
 
-using ("./SentryIntegration.jl")
+import ..SentryIntegration
 
 struct SerilogLogger <: AbstractLogger
     min_level::LogLevel
