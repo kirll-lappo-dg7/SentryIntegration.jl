@@ -373,7 +373,7 @@ end
 
 function clear_queue()
     while isready(main_hub.queued_tasks)
-        @debug "[Sentry]: waiting for the rest of events are sent..."
+        @info "[Sentry]: waiting for the rest of events are sent..."
         # send_envelope(take!(main_hub.queued_tasks))
         sleep(5)
     end
