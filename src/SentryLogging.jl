@@ -1,5 +1,5 @@
-module SentryLogging
-
+module SentryIntegration
+module Logger
 
 using Logging
 using LoggingExtras: TeeLogger
@@ -59,4 +59,5 @@ function apply_sentry_logger(logger)
     )
 end
 
-end # module
+end # module Logger
+end # module SentryIntegration
