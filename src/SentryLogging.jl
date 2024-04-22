@@ -1,9 +1,12 @@
 module SentryLogging
 
+
 using Logging
 using LoggingExtras: TeeLogger
 
 using ("./SentryIntegration.jl")
+
+export apply_sentry_logger
 
 struct SerilogLogger <: AbstractLogger
     min_level::LogLevel
