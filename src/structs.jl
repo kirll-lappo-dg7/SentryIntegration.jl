@@ -68,6 +68,7 @@ const TaskPayload = Union{Event,Transaction}
     release::Union{Nothing,String} = nothing
 
     debug::Bool = false
+    dry_mode::Bool = false
 
     last_send_time = nothing
     queued_tasks = Channel{TaskPayload}(100)
