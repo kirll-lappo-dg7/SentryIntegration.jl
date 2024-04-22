@@ -33,31 +33,28 @@ include("transactions.jl")
 const main_hub = Hub()
 const global_tags = Dict{String,String}()
 
-function init(dsn=nothing ; traces_sample_rate=nothing, traces_sampler=nothing, debug=false, release=nothing)
-    main_hub.initialised && @warn "Sentry already initialised."
-    if dsn === nothing
-        dsn = get(ENV, "SENTRY_DSN", nothing)
-        if dsn === nothing
-            # Abort - pretend nothing happened
-            @warn "No DSN for SentryIntegration"
-            return
-        end
+function init(dsn=nothing ; release=nothing, traces_sample_rate=nothing, traces_sampler=nothing, debug=false, dry_mode=nothing)
+    main_hub.initialised && @warn "Sentry Sdk must be initialized once."
+
+    set_dry_mode(main_hub, dry_mode)
+    set_dsn(main_hub, dsn)
+    set_release(main_hub, release)
+    set_environment()
+
+    if !main_hub.dry_mode && is_nothing_or_empty(main_hub.dsn)
+        @warn "[Sentry]: Sentry Dsn is not specified, no event will be sent"
+        return
+    end
+
+    if main_hub.dry_mode
+        @warn "[Sentry]: Dry Mode is enabled, the SDK will be initialized but no event will be sent to Sentry."
     end
 
     if !main_hub.initialised
         atexit(clear_queue)
     end
 
-
     main_hub.debug = debug
-    main_hub.dsn = dsn
-
-    upstream, project_id, public_key = parse_dsn(dsn)
-    main_hub.upstream = upstream
-    main_hub.project_id = project_id
-    main_hub.public_key = public_key
-
-    main_hub.release = release
 
     @assert traces_sample_rate === nothing || traces_sampler === nothing
     if traces_sample_rate !== nothing
@@ -70,6 +67,7 @@ function init(dsn=nothing ; traces_sample_rate=nothing, traces_sampler=nothing, 
 
     main_hub.sender_task = @async send_worker()
     bind(main_hub.queued_tasks, main_hub.sender_task)
+
     main_hub.initialised = true
 
     # TODO: Return something?
@@ -77,14 +75,85 @@ function init(dsn=nothing ; traces_sample_rate=nothing, traces_sampler=nothing, 
 end
 
 function parse_dsn(dsn)
-    dsn == "fake" && return (; upstream="", project_id="", public_key="")
+    if isnothing(dsn)
+        return (; is_valid=false, upstream="", project_id="", public_key="")
+    end
 
     m = match(r"(?'protocol'\w+)://(?'public_key'\w+)@(?'hostname'[\w\.]+(?::\d+)?)/(?'project_id'\w+)"a, dsn)
-    m === nothing && error("dsn does not fit correct format")
+    if dsn === "" || isnothing(m)
+        @warn "[Sentry]: Sentry Dsn does not fit correct format, sdk will not be enabled" dsn=dsn
+        return (; is_valid=false, upstream="", project_id="", public_key="")
+    end
 
     upstream = "$(m[:protocol])://$(m[:hostname])"
 
-    return (; upstream, project_id=m[:project_id], public_key=m[:public_key])
+    return (; is_valid=true, upstream=upstream, project_id=m[:project_id], public_key=m[:public_key])
+end
+
+function get_sentry_dsn()
+    get_env_var("SENTRY_DSN")
+end
+
+function get_sentry_release()
+    get_env_var("SENTRY_RELEASE")
+end
+
+function get_sentry_environment()
+    get_env_var("SENTRY_ENVIRONMENT")
+end
+
+function get_sentry_dry_mode()
+    get_env_var("SENTRY_JULIASDK_DRY_MODE")
+end
+
+function get_env_var(name, default=nothing)
+    get(ENV, name, default)
+end
+
+function set_release(hub::Hub, release)
+    if isnothing(release)
+        release = get_sentry_release()
+    end
+
+    if isnothing(release)
+        @warn "[Sentry]: Sentry Release is not specified"
+    end
+
+    hub.release = release
+end
+
+function set_environment()
+    environment = get_sentry_environment()
+    if !isnothing(environment)
+        set_tag("environment", environment)
+    end
+end
+
+function set_dsn(hub::Hub, dsn)
+    if isnothing(dsn)
+        dsn = get_sentry_dsn()
+    end
+
+    is_valid, upstream, project_id, public_key = parse_dsn(dsn)
+
+    if (is_valid)
+        hub.dsn = dsn
+        hub.upstream = upstream
+        hub.project_id = project_id
+        hub.public_key = public_key
+    end
+end
+
+function set_dry_mode(hub::Hub, dry_mode)
+    if isnothing(dry_mode)
+        dry_mode = !is_nothing_or_empty(get_sentry_dry_mode())
+    end
+
+    hub.dry_mode = dry_mode
+end
+
+function is_nothing_or_empty(value)
+    isnothing(value) || value === ""
 end
 
 ####################################################
@@ -92,11 +161,12 @@ end
 #--------------------------------------------------
 
 
-function set_tag(tag::String, data::String)
-    if tag == "release"
-        @warn "A 'release' tag is ignored by sentry upstream. You should instead set the release in the `init` call"
+function set_tag(name::String, value::String)
+    if name === "release"
+        @warn "[Sentry]: A 'release' tag is ignored by Sentry upstream. You should instead set the release in the `init` call or via SENTRY_RELEASE variable"
     end
-    global_tags[tag] = data
+
+    global_tags[name] = value
 end
 
 ##############################
@@ -250,31 +320,39 @@ function send_envelope(task::TaskPayload)
 
     buf = PipeBuffer()
     stream = CodecZlib.GzipCompressorStream(buf)
-    PrepareBody(task, buf)
-    body = read(stream)
-    close(stream)
+    body = nothing
+    try
+        PrepareBody(task, buf)
+        body = read(stream)
+    catch ex
+        @debug "[Sentry]: Error at preparing task body" exception=(ex)
+    finally
+        close(stream)
+    end
+
 
     if main_hub.debug
-        @info "Sending HTTP request" typeof(task)
+        body_text = String(transcode(CodecZlib.GzipDecompressor, body))
+        @debug "[Sentry]: Sending HTTP request" task=typeof(task) body_text=body_text
     end
-    if main_hub.dsn === "fake"
-        body = String(transcode(CodecZlib.GzipDecompressor, body))
-        lines = map(eachline(IOBuffer(body))) do line
-            line = JSON.Parser.parse(line)
-            line = JSON.json(line, 4)
-        end
-        @info "Would have sent this body"
-        foreach(println, lines)
+
+    if main_hub.dry_mode
         return
     end
+
     r = HTTP.request("POST", target, headers, body)
+
+    if main_hub.debug
+        @debug "[Sentry]: Sentry response" response=r
+    end
+
     if r.status == 429
         # TODO:
     elseif r.status == 200
         # TODO:
         r.body
     else
-        error("Unknown status $(r.status)")
+        @debug "[Sentry]: [ERROR]: Sentry server returned unknown status $(r.status)" response=r
     end
     nothing
 end
@@ -287,8 +365,7 @@ function send_worker()
             send_envelope(event)
         catch exc
             if main_hub.debug
-                @error "Sentry error"
-                showerror(stderr, exc, catch_backtrace())
+                @debug "[Sentry]: [ERROR]: Error in send_worker" exception=(exc, catch_backtrace())
             end
         end
     end
@@ -296,9 +373,9 @@ end
 
 function clear_queue()
     while isready(main_hub.queued_tasks)
-        @info "Waiting for queue to finish before closing"
+        @debug "[Sentry]: waiting for the rest of events are sent..."
         # send_envelope(take!(main_hub.queued_tasks))
-        sleep(1)
+        sleep(5)
     end
 end
 
