@@ -22,7 +22,11 @@ export capture_message,
     Error
 
 module SentryLogger
-using ("./SentryLogging.jl")
+
+include("./SentryLogging.jl")
+
+export apply_sentry_logger
+
 end
 
 
