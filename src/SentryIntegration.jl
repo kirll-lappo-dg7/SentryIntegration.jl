@@ -9,7 +9,7 @@ using JSON
 using PkgVersion
 using CodecZlib
 
-const VERSION = @PkgVersion.Version 0
+const VERSION = PkgVersion.@Version 0
 
 export capture_message,
     capture_exception,
@@ -20,6 +20,10 @@ export capture_message,
     Info,
     Warn,
     Error
+
+module SentryLogger
+using ("./SentryLogging.jl")
+end
 
 
 include("structs.jl")
@@ -33,7 +37,7 @@ include("transactions.jl")
 const main_hub = Hub()
 const global_tags = Dict{String,String}()
 
-function init(dsn=nothing ; release=nothing, traces_sample_rate=nothing, traces_sampler=nothing, debug=false, dry_mode=nothing)
+function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_sampler=nothing, debug=false, dry_mode=nothing)
     main_hub.initialised && @warn "Sentry Sdk must be initialized once."
 
     set_dry_mode(main_hub, dry_mode)
@@ -81,7 +85,7 @@ function parse_dsn(dsn)
 
     m = match(r"(?'protocol'\w+)://(?'public_key'\w+)@(?'hostname'[\w\.]+(?::\d+)?)/(?'project_id'\w+)"a, dsn)
     if dsn === "" || isnothing(m)
-        @warn "[Sentry]: Sentry Dsn does not fit correct format, sdk will not be enabled" dsn=dsn
+        @warn "[Sentry]: Sentry Dsn does not fit correct format, sdk will not be enabled" dsn = dsn
         return (; is_valid=false, upstream="", project_id="", public_key="")
     end
 
@@ -210,25 +214,25 @@ end
 
 function PrepareBody(event::Event, buf)
     envelope_header = (; event.event_id,
-                       sent_at = nowstr(),
-                       dsn = main_hub.dsn
-                       )
+        sent_at=nowstr(),
+        dsn=main_hub.dsn
+    )
 
     item = (;
-            event.timestamp,
-            event.platform,
-            server_name = gethostname(),
-            event.exception,
-            event.message,
-            event.level,
-            main_hub.release,
-            tags = MergeTags(global_tags, event.tags),
-            ) |> FilterNothings
+        event.timestamp,
+        event.platform,
+        server_name=gethostname(),
+        event.exception,
+        event.message,
+        event.level,
+        main_hub.release,
+        tags=MergeTags(global_tags, event.tags),
+    ) |> FilterNothings
     item_str = JSON.json(item)
 
     item_header = (; type="event",
-                   content_type="application/json",
-                   length=sizeof(item_str))
+        content_type="application/json",
+        length=sizeof(item_str))
 
 
     println(buf, JSON.json(envelope_header))
@@ -236,10 +240,10 @@ function PrepareBody(event::Event, buf)
     println(buf, item_str)
 
     for attachment in event.attachments
-        attachment_str = JSON.json((;data=attachment))
+        attachment_str = JSON.json((; data=attachment))
         attachment_header = (; type="attachment",
-                             length=sizeof(attachment_str),
-                             content_type="application/json")
+            length=sizeof(attachment_str),
+            content_type="application/json")
 
         println(buf, JSON.json(attachment_header))
         println(buf, attachment_str)
@@ -250,9 +254,9 @@ function PrepareBody(event::Event, buf)
 end
 function PrepareBody(transaction::Transaction, buf)
     envelope_header = (; transaction.event_id,
-                       sent_at = nowstr(),
-                       dsn = main_hub.dsn
-                       )
+        sent_at=nowstr(),
+        dsn=main_hub.dsn
+    )
 
     if main_hub.debug && any(span -> span.timestamp === nothing, transaction.spans)
         @warn "At least one span didn't complete before the transaction completed"
@@ -260,46 +264,44 @@ function PrepareBody(transaction::Transaction, buf)
 
     spans = map(transaction.spans) do span
         (;
-         transaction.trace_id,
-         span.parent_span_id,
-         span.span_id,
-         span.tags,
-         span.op,
-         span.description,
-         span.start_timestamp,
-         span.timestamp)
+            transaction.trace_id,
+            span.parent_span_id,
+            span.span_id,
+            span.tags,
+            span.op,
+            span.description,
+            span.start_timestamp,
+            span.timestamp)
     end
     #root_span = popfirst!(spans)
     # root_span = pop!(spans)
     root_span = transaction.root_span
 
     trace = (;
-             transaction.trace_id,
-             root_span.op,
-             root_span.description,
-             root_span.tags,
-             root_span.span_id,
-             root_span.parent_span_id,
-            ) |> FilterNothings
+        transaction.trace_id,
+        root_span.op,
+        root_span.description,
+        root_span.tags,
+        root_span.span_id,
+        root_span.parent_span_id,
+    ) |> FilterNothings
 
     item = (; type="transaction",
-            platform = "julia",
-            server_name = gethostname(),
-            transaction.event_id,
-            transaction = transaction.name,
-            # root_span...,
-            root_span.start_timestamp,
-            root_span.timestamp,
-            tags = MergeTags(global_tags, root_span.tags),
-
-            contexts = (; trace),
-            spans = FilterNothings.(spans),
-            ) |> FilterNothings
+        platform="julia",
+        server_name=gethostname(),
+        transaction.event_id,
+        transaction=transaction.name,
+        # root_span...,
+        root_span.start_timestamp,
+        root_span.timestamp,
+        tags=MergeTags(global_tags, root_span.tags), contexts=(; trace),
+        spans=FilterNothings.(spans),
+    ) |> FilterNothings
     item_str = JSON.json(item)
 
     item_header = (; type="transaction",
-                   content_type="application/json",
-                   length=sizeof(item_str)+1) # +1 for the newline to come
+        content_type="application/json",
+        length=sizeof(item_str) + 1) # +1 for the newline to come
 
 
     println(buf, JSON.json(envelope_header))
@@ -313,10 +315,10 @@ function send_envelope(task::TaskPayload)
     target = "$(main_hub.upstream)/api/$(main_hub.project_id)/envelope/"
 
     headers = ["Content-Type" => "application/x-sentry-envelope",
-               "content-encoding" => "gzip",
-               "User-Agent" => "SentryIntegration.jl/$VERSION",
-               "X-Sentry-Auth" => "Sentry sentry_version=7, sentry_client=SentryIntegration.jl/$VERSION, sentry_timestamp=$(nowstr()), sentry_key=$(main_hub.public_key)"
-               ]
+        "content-encoding" => "gzip",
+        "User-Agent" => "SentryIntegration.jl/$VERSION",
+        "X-Sentry-Auth" => "Sentry sentry_version=7, sentry_client=SentryIntegration.jl/$VERSION, sentry_timestamp=$(nowstr()), sentry_key=$(main_hub.public_key)"
+    ]
 
     buf = PipeBuffer()
     stream = CodecZlib.GzipCompressorStream(buf)
@@ -325,7 +327,7 @@ function send_envelope(task::TaskPayload)
         PrepareBody(task, buf)
         body = read(stream)
     catch ex
-        @debug "[Sentry]: Error at preparing task body" exception=(ex)
+        @debug "[Sentry]: Error at preparing task body" exception = (ex)
     finally
         close(stream)
     end
@@ -333,7 +335,7 @@ function send_envelope(task::TaskPayload)
 
     if main_hub.debug
         body_text = String(transcode(CodecZlib.GzipDecompressor, body))
-        @debug "[Sentry]: Sending HTTP request" task=typeof(task) body_text=body_text
+        @debug "[Sentry]: Sending HTTP request" task = typeof(task) body_text = body_text
     end
 
     if main_hub.dry_mode
@@ -343,7 +345,7 @@ function send_envelope(task::TaskPayload)
     r = HTTP.request("POST", target, headers, body)
 
     if main_hub.debug
-        @debug "[Sentry]: Sentry response" response=r
+        @debug "[Sentry]: Sentry response" response = r
     end
 
     if r.status == 429
@@ -352,7 +354,7 @@ function send_envelope(task::TaskPayload)
         # TODO:
         r.body
     else
-        @debug "[Sentry]: [ERROR]: Sentry server returned unknown status $(r.status)" response=r
+        @debug "[Sentry]: [ERROR]: Sentry server returned unknown status $(r.status)" response = r
     end
     nothing
 end
@@ -365,7 +367,7 @@ function send_worker()
             send_envelope(event)
         catch exc
             if main_hub.debug
-                @debug "[Sentry]: [ERROR]: Error in send_worker" exception=(exc, catch_backtrace())
+                @debug "[Sentry]: [ERROR]: Error in send_worker" exception = (exc, catch_backtrace())
             end
         end
     end
@@ -392,22 +394,22 @@ function capture_event(task::TaskPayload)
     push!(main_hub.queued_tasks, task)
 end
 
-function capture_message(message, level::LogLevel=Info ; kwds...)
+function capture_message(message, level::LogLevel=Info; kwds...)
     level_str = if level == Warn
         "warning"
     else
         lowercase(string(level))
     end
-    capture_message(message, level_str ; kwds...)
+    capture_message(message, level_str; kwds...)
 end
-function capture_message(message, level::String ; tags=nothing, attachments::Vector=[])
+function capture_message(message, level::String; tags=nothing, attachments::Vector=[])
     main_hub.initialised || return
 
     capture_event(Event(;
-                        message=(; formatted=message),
-                        level,
-                        attachments,
-                        tags))
+        message=(; formatted=message),
+        level,
+        attachments,
+        tags))
 end
 
 # This assumes that we are calling from within a catch
@@ -415,22 +417,22 @@ capture_exception(exc::Exception) = capture_exception([(exc, catch_backtrace())]
 function capture_exception(exceptions=catch_stack())
     main_hub.initialised || return
 
-    formatted_excs = map(exceptions) do (exc,strace)
+    formatted_excs = map(exceptions) do (exc, strace)
         bt = Base.scrub_repl_backtrace(strace)
         # frames = map(Base.stacktrace(strace, false)) do frame
         frames = map(bt) do frame
             Dict(:filename => frame.file,
-             :function => frame.func,
-             :lineno => frame.line)
+                :function => frame.func,
+                :lineno => frame.line)
         end
 
         Dict(:type => typeof(exc).name.name,
-         :module => string(typeof(exc).name.module),
-         :value => hasproperty(exc, :msg) ? exc.msg : sprint(showerror, exc),
-         :stacktrace => (;frames=reverse(frames)))
+            :module => string(typeof(exc).name.module),
+            :value => hasproperty(exc, :msg) ? exc.msg : sprint(showerror, exc),
+            :stacktrace => (; frames=reverse(frames)))
     end
-    capture_event(Event(exception=(;values=formatted_excs),
-                        level="error"))
+    capture_event(Event(exception=(; values=formatted_excs),
+        level="error"))
 end
 
 

@@ -1,6 +1,3 @@
-module SentryIntegration
-module Logger
-
 using Logging
 using LoggingExtras: TeeLogger
 
@@ -58,6 +55,3 @@ function apply_sentry_logger(logger)
         SerilogLogger(LogLevel(Error)),
     )
 end
-
-end # module Logger
-end # module SentryIntegration
