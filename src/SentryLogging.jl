@@ -17,6 +17,10 @@ function Logging.handle_message(filelogger::SentryLogger, level::LogLevel, messa
             return exception
         end
 
+        if (isa(exception, String))
+            return ErrorException(exception)
+        end
+
         (e, _) = exception
         if (!isnothing(e) && isa(e, Exception))
             return e
