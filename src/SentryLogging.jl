@@ -26,6 +26,10 @@ function Logging.handle_message(filelogger::SentryLogger, level::LogLevel, messa
             return e
         end
 
+        if (isa(e, String))
+            return ErrorException(e)
+        end
+
         return nothing
     end
 
