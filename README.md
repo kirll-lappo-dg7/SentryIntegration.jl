@@ -11,6 +11,90 @@ featured, however it includes the basics, such as:
 - tags,
 - transaction/span traces
 
+## Quick Setup
+
+1. Set Sentry-related environment variables:
+
+```shell
+SENTRY_DSN="https://################.ingest.sentry.io/############"
+SENTRY_RELEASE="package@1.0.0"
+SENTRY_ENVIRONMENT="Production"
+```
+
+2. Add SentryIntegration package to your project
+
+3. Call `init()` method **once** in your application
+
+```julia
+using SentryIntegration;
+
+SentryIntegration.init()
+```
+
+4. Integrate `SentryLogger` into you logging setup:
+
+```julia
+using Logging: global_logger
+using LoggingExtras: TeeLogger
+
+# Send message both to your loggers setup AND sentry
+# But you can set up any logger composition you want
+function apply_sentry_logger(logger)
+    TeeLogger(
+        logger,
+        SerilogLogger(LogLevel(Error)),
+    )
+end
+
+logger = global_logger()
+logger = apply_sentry_logger(logger)
+global_logger(logger)
+```
+
+5. Catch exceptions and log them using deafult `Logging` package
+
+```julia
+try
+    # your code here
+catch e
+    @error "Error at doing job" exception=(e, catch_backtrace())
+end
+```
+
+## Debug Sdk
+
+### Log Messages
+
+You can enable more log messages to detect problems with Sentry Sdk.
+
+```shell
+SENTRY_JULIASDK__DEBUG_MODE=1
+```
+
+Also can be done in code:
+
+```julia
+using SentryIntegration;
+
+SentryIntegration.init(; debug_mode=true)
+```
+
+### Dry Mode
+
+You can enable dry mode to enable Sentry Sdk, but no event will be sent to Sentry servers.
+
+```shell
+SENTRY_JULIASDK__DRY_MODE=1
+```
+
+Also can be done in code:
+
+```julia
+using SentryIntegration;
+
+SentryIntegration.init(; dry_mode=true)
+```
+
 ## Usage
 
 On start of your app, you need to initialise Sentry. If the environment variable

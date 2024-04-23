@@ -41,10 +41,11 @@ include("transactions.jl")
 const main_hub = Hub()
 const global_tags = Dict{String,String}()
 
-function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_sampler=nothing, debug=false, dry_mode=nothing)
+function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_sampler=nothing, debug_mode=nothing, dry_mode=nothing)
     main_hub.initialised && @warn "Sentry Sdk must be initialized once."
 
     set_dry_mode(main_hub, dry_mode)
+    set_debug_mode(main_hub, debug_mode)
     set_dsn(main_hub, dsn)
     set_release(main_hub, release)
     set_environment()
@@ -62,7 +63,6 @@ function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_s
         atexit(clear_queue)
     end
 
-    main_hub.debug = debug
 
     @assert traces_sample_rate === nothing || traces_sampler === nothing
     if traces_sample_rate !== nothing
@@ -111,7 +111,11 @@ function get_sentry_environment()
 end
 
 function get_sentry_dry_mode()
-    get_env_var("SENTRY_JULIASDK_DRY_MODE")
+    get_env_var("SENTRY_JULIASDK__DRY_MODE")
+end
+
+function get_sentry_debug_mode()
+    get_env_var("SENTRY_JULIASDK__DEBUG_MODE")
 end
 
 function get_env_var(name, default=nothing)
@@ -158,6 +162,14 @@ function set_dry_mode(hub::Hub, dry_mode)
     end
 
     hub.dry_mode = dry_mode
+end
+
+function set_debug_mode(hub::Hub, debug_mode)
+    if isnothing(debug_mode)
+        debug_mode = !is_nothing_or_empty(get_sentry_debug_mode())
+    end
+
+    hub.debug = debug_mode
 end
 
 function is_nothing_or_empty(value)
