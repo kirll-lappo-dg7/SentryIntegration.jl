@@ -1,13 +1,12 @@
 using Logging
-using LoggingExtras: TeeLogger
 
 import ..SentryIntegration
 
-struct SerilogLogger <: AbstractLogger
+struct SentryLogger <: AbstractLogger
     min_level::LogLevel
 end
 
-function Logging.handle_message(filelogger::SerilogLogger, level::LogLevel, message, args...; kwargs...)
+function Logging.handle_message(filelogger::SentryLogger, level::LogLevel, message, args...; kwargs...)
 
     function resolve_exception(exception)
         if (isnothing(exception))
@@ -35,21 +34,14 @@ function Logging.handle_message(filelogger::SerilogLogger, level::LogLevel, mess
     SentryIntegration.capture_exception(exception)
 end
 
-function Logging.shouldlog(filelogger::SerilogLogger, arg...)
+function Logging.shouldlog(filelogger::SentryLogger, arg...)
     true
 end
 
-function Logging.min_enabled_level(logger::SerilogLogger)
+function Logging.min_enabled_level(logger::SentryLogger)
     logger.min_level
 end
 
-function Logging.catch_exceptions(logger::SerilogLogger)
+function Logging.catch_exceptions(logger::SentryLogger)
     true
-end
-
-function apply_sentry_logger(logger)
-    TeeLogger(
-        logger,
-        SerilogLogger(LogLevel(Error)),
-    )
 end

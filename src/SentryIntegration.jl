@@ -21,11 +21,11 @@ export capture_message,
     Warn,
     Error
 
-module SentryLogger
+module Logger
 
 include("./SentryLogging.jl")
 
-export apply_sentry_logger
+export SentryLogger
 
 end
 

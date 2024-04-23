@@ -36,13 +36,14 @@ SentryIntegration.init()
 ```julia
 using Logging: global_logger
 using LoggingExtras: TeeLogger
+using SentryIntegration.Logger: SentryLogger;
 
 # Send message both to your loggers setup AND sentry
 # But you can set up any logger composition you want
 function apply_sentry_logger(logger)
     TeeLogger(
         logger,
-        SerilogLogger(LogLevel(Error)),
+        SentryLogger(LogLevel(Error)),
     )
 end
 
