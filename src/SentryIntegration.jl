@@ -80,7 +80,13 @@ function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_s
     main_hub.initialised = true
 
     if (main_hub.debug)
-        (dsn, release, dry_mode, debug, upstream, project_id, public_key) = main_hub
+        dsn = main_hub.dsn
+        release = main_hub.release
+        dry_mode = main_hub.dry_mode
+        debug = main_hub.debug
+        upstream = main_hub.upstream
+        project_id = main_hub.project_id
+        public_key = main_hub.public_key
         @debug "[Sentry]: Sdk was initialized" dsn upstream project_id public_key release dry_mode debug global_tags = global_tags
     end
 
