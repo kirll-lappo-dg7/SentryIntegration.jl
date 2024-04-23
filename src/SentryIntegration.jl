@@ -41,8 +41,10 @@ include("transactions.jl")
 const main_hub = Hub()
 const global_tags = Dict{String,String}()
 
-function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_sampler=nothing, debug_mode=nothing, dry_mode=nothing)
-    main_hub.initialised && @warn "Sentry Sdk must be initialized once."
+function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_sampler=nothing, debug_mode::Union{Nothing,Bool}=nothing, dry_mode::Union{Nothing,Bool}=nothing)
+    if (main_hub.initialised)
+        @warn "[Sentry]:Sentry Sdk must be initialized once."
+    end
 
     set_dry_mode(main_hub, dry_mode)
     set_debug_mode(main_hub, debug_mode)
@@ -63,7 +65,6 @@ function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_s
         atexit(clear_queue)
     end
 
-
     @assert traces_sample_rate === nothing || traces_sampler === nothing
     if traces_sample_rate !== nothing
         main_hub.traces_sampler = RatioSampler(traces_sample_rate)
@@ -77,6 +78,11 @@ function init(dsn=nothing; release=nothing, traces_sample_rate=nothing, traces_s
     bind(main_hub.queued_tasks, main_hub.sender_task)
 
     main_hub.initialised = true
+
+    if (main_hub.debug)
+        (dsn, release, dry_mode, debug, upstream, project_id, public_key) = main_hub
+        @debug "[Sentry]: Sdk was initialized" dsn upstream project_id public_key release dry_mode debug global_tags = global_tags
+    end
 
     # TODO: Return something?
     nothing
@@ -122,7 +128,7 @@ function get_env_var(name, default=nothing)
     get(ENV, name, default)
 end
 
-function set_release(hub::Hub, release)
+function set_release(hub::Hub, release::Union{Nothing,String})
     if isnothing(release)
         release = get_sentry_release()
     end
@@ -141,7 +147,7 @@ function set_environment()
     end
 end
 
-function set_dsn(hub::Hub, dsn)
+function set_dsn(hub::Hub, dsn::Union{Nothing,String})
     if isnothing(dsn)
         dsn = get_sentry_dsn()
     end
@@ -156,7 +162,7 @@ function set_dsn(hub::Hub, dsn)
     end
 end
 
-function set_dry_mode(hub::Hub, dry_mode)
+function set_dry_mode(hub::Hub, dry_mode::Union{Nothing,Bool})
     if isnothing(dry_mode)
         dry_mode = !is_nothing_or_empty(get_sentry_dry_mode())
     end
@@ -164,7 +170,7 @@ function set_dry_mode(hub::Hub, dry_mode)
     hub.dry_mode = dry_mode
 end
 
-function set_debug_mode(hub::Hub, debug_mode)
+function set_debug_mode(hub::Hub, debug_mode::Union{Nothing,Bool})
     if isnothing(debug_mode)
         debug_mode = !is_nothing_or_empty(get_sentry_debug_mode())
     end
