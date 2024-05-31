@@ -415,26 +415,34 @@ end
 #----------------------------------
 
 
-
 function capture_event(task::TaskPayload)
     main_hub.initialised || return
 
     push!(main_hub.queued_tasks, task)
 end
 
-function capture_message(message, level::LogLevel=Info; kwds...)
+function capture_message(message, level::LogLevel, exceptions; kwds...)
     level_str = if level == Warn
         "warning"
     else
         lowercase(string(level))
     end
-    capture_message(message, level_str; kwds...)
+
+    capture_message(message, level_str, exceptions; kwds...)
 end
-function capture_message(message, level::String; tags=nothing, attachments::Vector=[])
+
+function capture_message(message, level::String, exceptions; tags=nothing, attachments::Vector=[])
     main_hub.initialised || return
+
+    exception = nothing
+    if (!isnothing(exceptions))
+        formatted_excs = format_exception(exceptions)
+        exception = (; values=formatted_excs)
+    end
 
     capture_event(Event(;
         message=(; formatted=message),
+        exception=exception,
         level,
         attachments,
         tags))
@@ -445,7 +453,13 @@ capture_exception(exc::Exception) = capture_exception([(exc, catch_backtrace())]
 function capture_exception(exceptions=catch_stack())
     main_hub.initialised || return
 
-    formatted_excs = map(exceptions) do (exc, strace)
+    formatted_excs = format_exception(exceptions)
+    capture_event(Event(exception=(; values=formatted_excs),
+        level="error"))
+end
+
+function format_exception(exceptions=catch_stack())
+    map(exceptions) do (exc, strace)
         bt = Base.scrub_repl_backtrace(strace)
         # frames = map(Base.stacktrace(strace, false)) do frame
         frames = map(bt) do frame
@@ -459,8 +473,6 @@ function capture_exception(exceptions=catch_stack())
             :value => hasproperty(exc, :msg) ? exc.msg : sprint(showerror, exc),
             :stacktrace => (; frames=reverse(frames)))
     end
-    capture_event(Event(exception=(; values=formatted_excs),
-        level="error"))
 end
 
 
