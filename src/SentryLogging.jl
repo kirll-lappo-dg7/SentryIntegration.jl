@@ -6,43 +6,42 @@ struct SentryLogger <: AbstractLogger
     min_level::LogLevel
 end
 
-function Logging.handle_message(filelogger::SentryLogger, level::LogLevel, message, args...; kwargs...)
-
-    function resolve_exception(exception)
-        if (isnothing(exception))
-            return nothing
-        end
-
-        if (isa(exception, Exception))
-            return exception
-        end
-
-        if (isa(exception, String))
-            return ErrorException(exception)
-        end
-
-        (e, _) = exception
-        if (!isnothing(e) && isa(e, Exception))
-            return e
-        end
-
-        if (isa(e, String))
-            return ErrorException(e)
-        end
-
-        return nothing
-    end
+function Logging.handle_message(logger::SentryLogger, level::LogLevel, message, args...; kwargs...)
 
     exception = get(kwargs, :exception, nothing)
     exception = resolve_exception(exception)
-    if (isnothing(exception))
-        return
-    end
 
-    SentryIntegration.capture_exception(exception)
+    message = message || exception.message
+
+    SentryIntegration.capture_message(message, level, exception)
 end
 
-function Logging.shouldlog(filelogger::SentryLogger, arg...)
+function resolve_exception(exception)
+    if (isnothing(exception))
+        return nothing
+    end
+
+    (e, b) = exception
+    if (!isnothing(e) && isa(e, Exception) && !isnothing(b))
+        return (e, b)
+    end
+
+    if (isa(exception, Exception))
+        return exception
+    end
+
+    if (isa(exception, String))
+        return ErrorException(exception)
+    end
+
+    if (isa(e, String))
+        return ErrorException(e)
+    end
+
+    return nothing
+end
+
+function Logging.shouldlog(logger::SentryLogger, arg...)
     true
 end
 
