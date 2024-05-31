@@ -38,15 +38,15 @@ function resolve_exception(exception)
     end
 
     if (isa(exception, Exception))
-        return exception
+        return (exception, nothing)
     end
 
     if (isa(exception, String))
-        return ErrorException(exception)
+        return (ErrorException(exception), nothing)
     end
 
     if (isa(e, String))
-        return ErrorException(e)
+        return (ErrorException(e), nothing)
     end
 
     return nothing
