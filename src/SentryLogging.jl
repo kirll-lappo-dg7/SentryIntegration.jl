@@ -15,7 +15,7 @@ function Logging.handle_message(logger::SentryLogger, level::LogLevel, message, 
         message = exception.message
     end
 
-    SentryIntegration.capture_message(message, level, exception)
+    SentryIntegration.capture_message(message, level, [exception])
 end
 
 function resolve_exception(exception)
