@@ -11,7 +11,9 @@ function Logging.handle_message(logger::SentryLogger, level::LogLevel, message, 
     exception = get(kwargs, :exception, nothing)
     exception = resolve_exception(exception)
 
-    message = message || exception.message
+    if (isnothin(message) || message == "")
+        message = exception.message
+    end
 
     SentryIntegration.capture_message(message, level, exception)
 end
