@@ -421,7 +421,7 @@ function capture_event(task::TaskPayload)
     push!(main_hub.queued_tasks, task)
 end
 
-function capture_message(message, level::LogLevel=Info, exceptions; kwds...)
+function capture_message(message, level::LogLevel, exceptions; kwds...)
     level_str = if level == Warn
         "warning"
     else
