@@ -9,18 +9,27 @@ end
 function Logging.handle_message(logger::SentryLogger, level::LogLevel, message, args...; kwargs...)
 
     exception = get(kwargs, :exception, nothing)
-    exception = resolve_exception(exception)
+    (exception, backtrace) = resolve_exception(exception)
+
+    exceptions = nothing
+    if (!isnothing(exception))
+        if (isnothing(backtrace))
+            backtrace = catch_backtrace()
+        end
+
+        exceptions = [(exception, backtrace)]
+    end
 
     if (isnothing(message) || message == "")
         message = exception.message
     end
 
-    SentryIntegration.capture_message(message, level, [exception])
+    SentryIntegration.capture_message(message, level, exceptions)
 end
 
 function resolve_exception(exception)
     if (isnothing(exception))
-        return nothing
+        return (nothing, nothing)
     end
 
     (e, b) = exception
