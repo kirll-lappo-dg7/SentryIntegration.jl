@@ -1,7 +1,7 @@
 module SentryIntegration
 
 using AutoParameters
-using Logging: Info, Warn, Error, LogLevel
+using Logging: Debug, Info, Warn, Error, LogLevel
 using UUIDs
 using Dates
 using HTTP
@@ -243,6 +243,7 @@ end
 function PrepareBody(event::Event, buf)
     envelope_header = (; event.event_id,
         sent_at=nowstr(),
+        sdk=(; name="sentry.julia", version="0.5.0"),
         dsn=main_hub.dsn
     )
 
@@ -255,6 +256,7 @@ function PrepareBody(event::Event, buf)
         event.level,
         main_hub.release,
         tags=MergeTags(global_tags, event.tags),
+        extra=event.metadata
     ) |> FilterNothings
     item_str = JSON.json(item)
 
@@ -283,6 +285,7 @@ end
 function PrepareBody(transaction::Transaction, buf)
     envelope_header = (; transaction.event_id,
         sent_at=nowstr(),
+        sdk=(; name="sentry.julia", version="0.5.0"),
         dsn=main_hub.dsn
     )
 
@@ -421,31 +424,44 @@ function capture_event(task::TaskPayload)
     push!(main_hub.queued_tasks, task)
 end
 
-function capture_message(message, level::LogLevel, exceptions; kwds...)
-    level_str = if level == Warn
-        "warning"
-    else
-        lowercase(string(level))
-    end
+function capture_message(message::String, level::LogLevel, exceptions; kwargs...)
+    level_str = get_sentry_level(level)
 
-    capture_message(message, level_str, exceptions; kwds...)
+    capture_sentry_message(message, level_str, exceptions; kwargs...)
 end
 
-function capture_message(message, level::String, exceptions; tags=nothing, attachments::Vector=[])
+function capture_sentry_message(message::String, level::String, exceptions; metadata::Dict{String,String}=nothing)
     main_hub.initialised || return
-
     exception = nothing
     if (!isnothing(exceptions))
         formatted_excs = format_exception(exceptions)
         exception = (; values=formatted_excs)
     end
 
+    tags::Dict{String,String} = Dict{String,String}()
+    attachments::Vector = []
+
     capture_event(Event(;
         message=(; formatted=message),
         exception=exception,
         level,
         attachments,
+        metadata=metadata,
         tags))
+end
+
+function get_sentry_level(level::LogLevel)::String
+    if level == Debug
+        return "debug"
+    elseif level == Info
+        return "info"
+    elseif level == Warn
+        return "warning"
+    elseif level == Error
+        return "error"
+    else
+        return "error"
+    end
 end
 
 # This assumes that we are calling from within a catch

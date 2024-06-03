@@ -6,7 +6,7 @@ struct SentryLogger <: AbstractLogger
     min_level::LogLevel
 end
 
-function Logging.handle_message(logger::SentryLogger, level::LogLevel, message, args...; kwargs...)
+function Logging.handle_message(logger::SentryLogger, level::LogLevel, message::String, args...; kwargs...)
 
     exception = get(kwargs, :exception, nothing)
     (exception, backtrace) = resolve_exception(exception)
@@ -24,7 +24,9 @@ function Logging.handle_message(logger::SentryLogger, level::LogLevel, message, 
         message = exception.message
     end
 
-    SentryIntegration.capture_message(message, level, exceptions)
+    metadata::Dict{String,String} = get(kwargs, :metadata, Dict{String,String}())
+
+    SentryIntegration.capture_message(message, level, exceptions; metadata=metadata)
 end
 
 function resolve_exception(exception)

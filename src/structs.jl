@@ -11,6 +11,7 @@
     exception = nothing
     level = nothing
     tags = nothing
+    metadata::Dict{String,String} = nothing
     attachments::Vector{Any} = []
 end
 
